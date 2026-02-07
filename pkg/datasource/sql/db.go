@@ -35,69 +35,67 @@ import (
 
 type dbOption func(db *DBResource)
 
-func withDsn(dsn string) dbOption {
+// WithDsn sets the DSN for the resource
+func WithDsn(dsn string) dbOption {
 	return func(db *DBResource) {
 		db.dsn = dsn
 	}
 }
 
-func withResourceID(id string) dbOption {
+// WithResourceID sets the resource ID
+func WithResourceID(id string) dbOption {
 	return func(db *DBResource) {
 		db.resourceID = id
 	}
 }
 
-func withTableMetaCache(c datasource.TableMetaCache) dbOption {
+// WithTableMetaCache sets the table metadata cache
+func WithTableMetaCache(c datasource.TableMetaCache) dbOption {
 	return func(db *DBResource) {
 		db.metaCache = c
 	}
 }
 
-func withDBType(dt types.DBType) dbOption {
+// WithDBType sets the database type
+func WithDBType(dt types.DBType) dbOption {
 	return func(db *DBResource) {
 		db.dbType = dt
 	}
 }
 
-func withBranchType(dt branch.BranchType) dbOption {
+// WithBranchType sets the branch type
+func WithBranchType(dt branch.BranchType) dbOption {
 	return func(db *DBResource) {
 		db.branchType = dt
 	}
 }
 
-func withTarget(source *sql.DB) dbOption {
+// WithTarget sets the target database connection pool
+func WithTarget(source *sql.DB) dbOption {
 	return func(db *DBResource) {
 		db.db = source
 	}
 }
 
-func withConnector(ci driver.Connector) dbOption {
+// WithConnector sets the connector
+func WithConnector(ci driver.Connector) dbOption {
 	return func(db *DBResource) {
 		db.connector = ci
 	}
 }
 
-func withDBName(dbName string) dbOption {
+// WithDBName sets the database name
+func WithDBName(dbName string) dbOption {
 	return func(db *DBResource) {
 		db.dbName = dbName
 	}
 }
 
-func withConf(conf *XAConnConf) dbOption {
+// WithConf sets the XA connection configuration
+func WithConf(conf *XAConnConf) dbOption {
 	return func(db *DBResource) {
 		db.xaConnConf = conf
 	}
-}
-
-func newResource(opts ...dbOption) (*DBResource, error) {
-	db := new(DBResource)
-
-	for i := range opts {
-		opts[i](db)
-	}
-
-	db.init()
-	return db, nil
 }
 
 // DBResource proxy sql.DB, enchance database/sql.DB to add distribute transaction ability
@@ -253,6 +251,11 @@ func (db *DBResource) checkDbVersion() error {
 			db.shouldBeHeld = true
 		}
 	case types.DBTypeMARIADB:
+		db.shouldBeHeld = true
+	case types.DBTypeOracle:
+		// Oracle XA behavior varies by version
+		// Oracle 12c+ has better XA support
+		// For now, assume connection should be held
 		db.shouldBeHeld = true
 	}
 	return nil

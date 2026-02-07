@@ -59,6 +59,18 @@ var SqlDataTypes = map[string]int32{
 	"REF_CURSOR":              2012,
 	"TIME_WITH_TIMEZONE":      2013,
 	"TIMESTAMP_WITH_TIMEZONE": 2014,
+	// Oracle specific types
+	"VARCHAR2":                12,  // Oracle VARCHAR2 maps to VARCHAR
+	"NVARCHAR2":               -9,  // Oracle NVARCHAR2 maps to NVARCHAR
+	"NUMBER":                  2,   // Oracle NUMBER maps to NUMERIC
+	"RAW":                     -2,  // Oracle RAW maps to VARBINARY
+	"LONG RAW":                -4,  // Oracle LONG RAW maps to LONGVARBINARY
+	"BFILE":                   2004, // Oracle BFILE maps to BLOB
+	"TIMESTAMP WITH TIME ZONE":2014, // Oracle TIMESTAMP WITH TIME ZONE
+	"TIMESTAMP WITH LOCAL TIME ZONE": 2014, // Oracle TIMESTAMP WITH LOCAL TIME ZONE
+	"INTERVAL YEAR TO MONTH":  2015, // Oracle INTERVAL YEAR TO MONTH
+	"INTERVAL DAY TO SECOND":  2016, // Oracle INTERVAL DAY TO SECOND
+	"UROWID":                  -8,   // Oracle UROWID maps to ROWID
 }
 
 func GetSqlDataType(dataType string) int32 {

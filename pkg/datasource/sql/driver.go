@@ -46,78 +46,70 @@ const (
 
 func initDriver() {
 	sql.Register(SeataATMySQLDriver, &seataATDriver{
-		seataDriver: &seataDriver{
-			branchType: branch.BranchTypeAT,
-			transType:  types.ATMode,
-			target:     mysql.MySQLDriver{},
+		SeataDriver: &SeataDriver{
+			BranchType: branch.BranchTypeAT,
+			TransType:  types.ATMode,
+			Target:     mysql.MySQLDriver{},
 		},
 	})
 
 	sql.Register(SeataXAMySQLDriver, &seataXADriver{
-		seataDriver: &seataDriver{
-			branchType: branch.BranchTypeXA,
-			transType:  types.XAMode,
-			target:     mysql.MySQLDriver{},
+		SeataDriver: &SeataDriver{
+			BranchType: branch.BranchTypeXA,
+			TransType:  types.XAMode,
+			Target:     mysql.MySQLDriver{},
 		},
 	})
 }
 
 type seataATDriver struct {
-	*seataDriver
+	*SeataDriver
 }
 
 func (d *seataATDriver) OpenConnector(name string) (c driver.Connector, err error) {
-	connector, err := d.seataDriver.OpenConnector(name)
+	connector, err := d.SeataDriver.OpenConnector(name)
 	if err != nil {
 		return nil, err
 	}
 
-	_connector, _ := connector.(*seataConnector)
-	_connector.transType = types.ATMode
+	_connector, _ := connector.(*SeataConnector)
+	_connector.TransType = types.ATMode
 	cfg, _ := mysql.ParseDSN(name)
-	_connector.cfg = cfg
+	_connector.Cfg = cfg
 
 	return &seataATConnector{
-		seataConnector: _connector,
+		SeataConnector: _connector,
 	}, nil
 }
 
 type seataXADriver struct {
-	*seataDriver
+	*SeataDriver
 }
 
 func (d *seataXADriver) OpenConnector(name string) (c driver.Connector, err error) {
-	connector, err := d.seataDriver.OpenConnector(name)
+	connector, err := d.SeataDriver.OpenConnector(name)
 	if err != nil {
 		return nil, err
 	}
 
-	_connector, _ := connector.(*seataConnector)
-	_connector.transType = types.XAMode
+	_connector, _ := connector.(*SeataConnector)
+	_connector.TransType = types.XAMode
 	cfg, _ := mysql.ParseDSN(name)
-	_connector.cfg = cfg
+	_connector.Cfg = cfg
 
 	return &seataXAConnector{
-		seataConnector: _connector,
+		SeataConnector: _connector,
 	}, nil
 }
 
-type seataDriver struct {
-	branchType branch.BranchType
-	transType  types.TransactionMode
-	target     driver.Driver
+// Open never be called, because SeataDriver implemented driver.DriverContext interface.
+func (d *SeataDriver) Open(name string) (driver.Conn, error) {
+	return nil, errors.New("operation unsupport")
 }
 
-// Open never be called, because seataDriver implemented dri.DriverContext interface.
-// reference package: datasource/sql [https://cs.opensource.google/go/go/+/master:src/database/sql/sql.go;l=813]
-// and maybe the sql.BD will be call Driver() method, but it obtain the Driver is fron Connector that is proxed by seataConnector.
-func (d *seataDriver) Open(name string) (driver.Conn, error) {
-	return nil, errors.New(("operation unsupport."))
-}
-
-func (d *seataDriver) OpenConnector(name string) (c driver.Connector, err error) {
-	c = &dsnConnector{dsn: name, driver: d.target}
-	if driverCtx, ok := d.target.(driver.DriverContext); ok {
+func (d *SeataDriver) OpenConnector(name string) (c driver.Connector, err error) {
+	c = &dsnConnector{dsn: name, driver: d.Target}
+	if driverCtx, ok := d.Target.(driver.DriverContext); ok {
 		c, err = driverCtx.OpenConnector(name)
 		if err != nil {
 			log.Errorf("open connector: %v", err)
@@ -139,36 +131,44 @@ func (d *seataDriver) OpenConnector(name string) (c driver.Connector, err error)
 	return proxy, nil
 }
 
-func (d *seataDriver) getOpenConnectorProxy(connector driver.Connector, dbType types.DBType,
+func (d *SeataDriver) getOpenConnectorProxy(connector driver.Connector, dbType types.DBType,
 	db *sql.DB, dataSourceName string) (driver.Connector, error) {
 	cfg, _ := mysql.ParseDSN(dataSourceName)
 	options := []dbOption{
-		withResourceID(parseResourceID(dataSourceName)),
-		withTarget(db),
-		withBranchType(d.branchType),
-		withDBType(dbType),
-		withDBName(cfg.DBName),
-		withConnector(connector),
+		WithResourceID(parseResourceID(dataSourceName)),
+		WithTarget(db),
+		WithBranchType(d.BranchType),
+		WithDBType(dbType),
+		WithDBName(cfg.DBName),
+		WithConnector(connector),
 	}
-	res, err := newResource(options...)
+	res, err := NewResource(options...)
 	if err != nil {
 		log.Errorf("create new resource: %v", err)
 		return nil, err
 	}
 	datasource.RegisterTableCache(types.DBTypeMySQL, mysql2.NewTableMetaInstance(db, cfg))
-	if err = datasource.GetDataSourceManager(d.branchType).RegisterResource(res); err != nil {
+	if err = datasource.GetDataSourceManager(d.BranchType).RegisterResource(res); err != nil {
 		log.Errorf("register resource: %v", err)
 		return nil, err
 	}
-	return &seataConnector{
-		res:    res,
-		target: connector,
-		cfg:    cfg,
-	}, nil
+	return NewSeataConnector(connector, res, cfg), nil
 }
 
-func (d *seataDriver) getTargetDriverName() string {
+func (d *SeataDriver) getTargetDriverName() string {
 	return "mysql"
+}
+
+// NewResource creates a new DBResource
+func NewResource(opts ...dbOption) (*DBResource, error) {
+	db := new(DBResource)
+
+	for i := range opts {
+		opts[i](db)
+	}
+
+	db.init()
+	return db, nil
 }
 
 type dsnConnector struct {

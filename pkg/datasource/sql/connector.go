@@ -20,7 +20,6 @@ package sql
 import (
 	"context"
 	"database/sql/driver"
-	"sync"
 
 	"github.com/go-sql-driver/mysql"
 
@@ -28,12 +27,12 @@ import (
 )
 
 type seataATConnector struct {
-	*seataConnector
+	*SeataConnector
 	transType types.TransactionMode
 }
 
 func (c *seataATConnector) Connect(ctx context.Context) (driver.Conn, error) {
-	conn, err := c.seataConnector.Connect(ctx)
+	conn, err := c.SeataConnector.Connect(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -47,17 +46,17 @@ func (c *seataATConnector) Connect(ctx context.Context) (driver.Conn, error) {
 
 func (c *seataATConnector) Driver() driver.Driver {
 	return &seataATDriver{
-		seataDriver: c.seataConnector.Driver().(*seataDriver),
+		SeataDriver: c.SeataConnector.Driver().(*SeataDriver),
 	}
 }
 
 type seataXAConnector struct {
-	*seataConnector
+	*SeataConnector
 	transType types.TransactionMode
 }
 
 func (c *seataXAConnector) Connect(ctx context.Context) (driver.Conn, error) {
-	conn, err := c.seataConnector.Connect(ctx)
+	conn, err := c.SeataConnector.Connect(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -71,69 +70,56 @@ func (c *seataXAConnector) Connect(ctx context.Context) (driver.Conn, error) {
 
 func (c *seataXAConnector) Driver() driver.Driver {
 	return &seataXADriver{
-		seataDriver: c.seataConnector.Driver().(*seataDriver),
+		SeataDriver: c.SeataConnector.Driver().(*SeataDriver),
 	}
 }
 
-// A Connector represents a driver in a fixed configuration
-// and can create any number of equivalent Conns for use
-// by multiple goroutines.
-//
-// A Connector can be passed to sql.OpenDB, to allow drivers
-// to implement their own sql.DB constructors, or returned by
-// DriverContext's OpenConnector method, to allow drivers
-// access to context and to avoid repeated parsing of driver
-// configuration.
-//
-// If a Connector implements io.Closer, the sql package's DB.Close
-// method will call Close and return error (if any).
-type seataConnector struct {
-	transType types.TransactionMode
-	res       *DBResource
-	once      sync.Once
-	driver    driver.Driver
-	target    driver.Connector
-	cfg       *mysql.Config
-}
-
 // Connect returns a connection to the database.
-// Connect may return a cached connection (one previously
-// closed), but doing so is unnecessary; the sql package
-// maintains a pool of idle connections for efficient re-use.
-//
-// The provided context.Context is for dialing purposes only
-// (see net.DialContext) and should not be stored or used for
-// other purposes. A default timeout should still be used
-// when dialing as a connection pool may call Connect
-// asynchronously to any query.
-//
-// The returned connection is only used by one goroutine at a
-// time.
-func (c *seataConnector) Connect(ctx context.Context) (driver.Conn, error) {
+func (c *SeataConnector) Connect(ctx context.Context) (driver.Conn, error) {
 	conn, err := c.target.Connect(ctx)
 	if err != nil {
 		return nil, err
 	}
+
+	// Get dbName and dbType from the resource
+	dbName := c.Res.dbName
+	dbType := c.Res.dbType
+
+	// For MySQL, also check cfg for dbName
+	if dbName == "" && c.Cfg != nil {
+		if mysqlCfg, ok := c.Cfg.(*mysql.Config); ok {
+			dbName = mysqlCfg.DBName
+		}
+	}
+
 	return &Conn{
 		targetConn: conn,
-		res:        c.res,
+		res:        c.Res,
 		txCtx:      types.NewTxCtx(),
 		autoCommit: true,
-		dbName:     c.cfg.DBName,
-		dbType:     types.DBTypeMySQL,
+		dbName:     dbName,
+		dbType:     dbType,
 	}, nil
 }
 
-// Driver returns the underlying Driver of the Connector,
-// mainly to maintain compatibility with the Driver method
-// on sql.DB.
-func (c *seataConnector) Driver() driver.Driver {
+// Driver returns the underlying Driver of the Connector
+func (c *SeataConnector) Driver() driver.Driver {
 	c.once.Do(func() {
 		d := c.target.Driver()
 		c.driver = d
 	})
 
-	return &seataDriver{
-		target: c.driver,
+	return &SeataDriver{
+		Target: c.driver,
 	}
+}
+
+// GetResource returns the DBResource
+func (c *SeataConnector) GetResource() *DBResource {
+	return c.Res
+}
+
+// GetConfig returns the database-specific config
+func (c *SeataConnector) GetConfig() interface{} {
+	return c.Cfg
 }

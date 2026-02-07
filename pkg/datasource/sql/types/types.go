@@ -96,6 +96,10 @@ func ParseDBType(driverName string) DBType {
 	switch strings.ToLower(driverName) {
 	case "mysql":
 		return DBTypeMySQL
+	case "mariadb":
+		return DBTypeMARIADB
+	case "oracle":
+		return DBTypeOracle
 	default:
 		return DBTypeUnknown
 	}
